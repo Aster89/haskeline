@@ -23,13 +23,15 @@ type SavedCommand m = Command (ViT m) (ArgMode CommandMode) EitherMode
 
 data ViState m = ViState {
             lastCommand :: SavedCommand m,
-            lastSearch :: [Grapheme]
+            lastSearch :: [Grapheme],
+            lastInlineSearch :: Maybe Grapheme
          }
 
 emptyViState :: Monad m => ViState m
 emptyViState = ViState {
             lastCommand = return . Left . argState,
-            lastSearch = []
+            lastSearch = [],
+            lastInlineSearch = Nothing
         }
 
 type ViT m = StateT (ViState m) (InputCmdT m)
@@ -129,8 +131,9 @@ simpleCmdActions = choiceCmd [
                     , simpleKey UpKey +> historyBack >=> change moveToStart
                     , simpleChar '/' +> viEnterSearch '/' Reverse
                     , simpleChar '?' +> viEnterSearch '?' Forward
-                    , simpleChar 'n' +> viSearchHist Reverse []
+                    , simpleChar 'n' +> viSearchHist Reverse [] -- TODO: these don't work after entering another line
                     , simpleChar 'N' +> viSearchHist Forward []
+                    --, simpleChar ',' +> _uffa
                     , simpleKey KillLine +> noArg >=> killAndStoreCmd (SimpleMove moveToStart)
                     ]
 
@@ -152,11 +155,21 @@ repeatedCommands = choiceCmd [argumented, doBefore noArg repeatableCommands]
 pureMovements :: InputKeyCmd (ArgMode CommandMode) CommandMode
 pureMovements = choiceCmd $ charMovements ++ map mkSimpleCommand movements
     where
-        charMovements = [ charMovement 'f' $ \c -> goRightUntil $ overChar (==c)
-                        , charMovement 'F' $ \c -> goLeftUntil $ overChar (==c)
+        charMovements = [ charMovement 'F' $ \c -> goLeftUntil $ overChar (==c)
+                        , simpleChar 'f' +> bar >=> foo
+                        , simpleChar ';' +> baz
                         , charMovement 't' $ \c -> goRightUntil $ beforeChar (==c)
                         , charMovement 'T' $ \c -> goLeftUntil $ afterChar (==c)
                         ]
+        -- XXX: This is setting the state to 'x', whereas it should get the char from the key press...
+        bar = putInState Forward (baseGrapheme 'x')
+        -- XXX: ... possibly the keypress that comes from useChar below
+        foo = keyChoiceCmd [
+                           useChar (change . applyCmdArg . (\c -> goRightUntil $ overChar (==c)))
+                           , withoutConsuming (change argState)
+                           ]
+        -- XXX: This seems to be doing its job (so presumably I'll just need to cleanup/refactor):
+        baz = getFromState >=> change (\(x, Just c) -> applyCmdArg (goLeftUntil $ overChar (== gBaseChar c)) x)
         mkSimpleCommand (k,move) = k +> change (applyCmdArg move)
         charMovement c move = simpleChar c +> keyChoiceCmd [
                                         useChar (change . applyCmdArg . move)
@@ -451,3 +464,17 @@ viSearchHist dir toSearch cm = do
         Right sm -> do
             put vstate {lastSearch = toSearch'}
             setState (restore (foundHistory sm))
+
+putInState :: forall m . Monad m
+    => Direction -> Grapheme -> Command (ViT m) (ArgMode CommandMode) (ArgMode CommandMode)
+putInState d g s = do
+  vstate :: ViState m <- get
+  let newstate = vstate { lastInlineSearch = Just g }
+  put newstate
+  return s
+
+getFromState :: forall m . Monad m
+    => Command (ViT m) (ArgMode CommandMode) (ArgMode CommandMode, Maybe Grapheme)
+getFromState s = do
+  vstate :: ViState m <- get
+  return $ (s, lastInlineSearch vstate)

@@ -34,9 +34,9 @@ import System.Console.Haskeline.LineState
 import System.Console.Haskeline.Key
 
 data Effect = LineChange (Prefix -> LineChars)
-              | PrintLines [String]
-              | ClearScreen
-              | RingBell
+            | PrintLines [String]
+            | ClearScreen
+            | RingBell
 
 lineChange :: LineState s => s -> Effect
 lineChange = LineChange . flip lineChars

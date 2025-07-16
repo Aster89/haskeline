@@ -3,7 +3,8 @@ This module contains the various datatypes which model the state of the line; th
 -}
 module System.Console.Haskeline.LineState(
                     -- * Graphemes
-                    Grapheme(),
+                    Grapheme(gBaseChar),
+                    baseGrapheme,
                     baseChar,
                     stringToGraphemes,
                     graphemesToString,
@@ -163,7 +164,7 @@ listRestore xs = restore $ IMode (reverse xs) []
 
 class Move s where
     goLeft, goRight, moveToStart, moveToEnd :: s -> s
-    
+
 -- | The standard line state representation; considers the cursor to be located
 -- between two characters.  The first list is reversed.
 data InsertMode = IMode [Grapheme] [Grapheme]
@@ -303,9 +304,7 @@ enterCommandModeRight (IMode xs (y:ys)) = CMode xs y ys
 enterCommandModeRight (IMode (x:xs) []) = CMode xs x []
 enterCommandModeRight _ = CEmpty
 
-
 insertFromCommandMode, appendFromCommandMode :: CommandMode -> InsertMode
-
 insertFromCommandMode CEmpty = emptyIM
 insertFromCommandMode (CMode xs c ys) = IMode xs (c:ys)
 
@@ -348,9 +347,10 @@ addNum n am
 applyArg :: (s -> s) -> ArgMode s -> s
 applyArg f am = repeatN (arg am) f (argState am)
 
-repeatN :: Int -> (a -> a) -> a -> a
-repeatN n f | n <= 1 = f
-          | otherwise = f . repeatN (n-1) f
+repeatN :: Int -> (a -> a) -> a -> a -- TODO: I can't believe there isn't something on Hackage (either way, use a fold!)
+repeatN n f
+  | n <= 1 = f
+  | otherwise = f . repeatN (n-1) f
 
 applyCmdArg :: (InsertMode -> InsertMode) -> ArgMode CommandMode -> CommandMode
 applyCmdArg f am = withCommandMode (repeatN (arg am) f) (argState am)

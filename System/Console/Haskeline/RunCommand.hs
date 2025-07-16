@@ -18,8 +18,7 @@ runCommandLoop tops@TermOps{evalTerm = e} prefix cmds initState
                 -- in order to build on ghc-6.12.3
         EvalTerm eval liftE
             -> eval $ withGetEvent tops
-                $ runCommandLoop' liftE tops prefix initState
-                    cmds 
+                $ runCommandLoop' liftE tops prefix initState cmds
 
 runCommandLoop' :: forall m n s a . (Term n, CommandMonad n,
         MonadState Layout m, LineState s)
