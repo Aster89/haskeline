@@ -44,8 +44,7 @@ viKeyCommands = choiceCmd [
                 simpleChar '\n' +> finish
                 , ctrlChar 'd' +> eofIfEmpty
                 , simpleInsertions >+> viCommands
-                , simpleChar '\ESC' +> change enterCommandMode
-                    >=> viCommandActions
+                , simpleChar '\ESC' +> change enterCommandMode >=> viCommandActions
                 ]
 
 viCommands :: InputCmd InsertMode (Maybe String)
@@ -156,7 +155,7 @@ pureMovements :: InputKeyCmd (ArgMode CommandMode) CommandMode
 pureMovements = choiceCmd $ charMovements ++ map mkSimpleCommand movements
     where
         charMovements = [ charMovement 'F' $ \c -> goLeftUntil $ overChar (==c)
-                        , simpleChar 'f' +> bar >=> foo
+                        , simpleChar 'f' +> foo >=> bar
                         , simpleChar ';' +> baz
                         , charMovement 't' $ \c -> goRightUntil $ beforeChar (==c)
                         , charMovement 'T' $ \c -> goLeftUntil $ afterChar (==c)
@@ -164,10 +163,14 @@ pureMovements = choiceCmd $ charMovements ++ map mkSimpleCommand movements
         -- XXX: This is setting the state to 'x', whereas it should get the char from the key press...
         bar = putInState Forward (baseGrapheme 'x')
         -- XXX: ... possibly the keypress that comes from useChar below
-        foo = keyChoiceCmd [
+        foo :: Monad m => ArgMode CommandMode -> CmdM (ViT m) CommandMode
+        foo s = do r <- keyChoiceCmd [
                            useChar (change . applyCmdArg . (\c -> goRightUntil $ overChar (==c)))
                            , withoutConsuming (change argState)
-                           ]
+                           ] s
+                   --vtate :: ViState m <- get
+                   --put vstate {lastInlineSearch = Just (baseGrapheme 'x')}
+                   return r
         -- XXX: This seems to be doing its job (so presumably I'll just need to cleanup/refactor):
         baz = getFromState >=> change (\(x, Just c) -> applyCmdArg (goLeftUntil $ overChar (== gBaseChar c)) x)
         mkSimpleCommand (k,move) = k +> change (applyCmdArg move)
@@ -466,7 +469,7 @@ viSearchHist dir toSearch cm = do
             setState (restore (foundHistory sm))
 
 putInState :: forall m . Monad m
-    => Direction -> Grapheme -> Command (ViT m) (ArgMode CommandMode) (ArgMode CommandMode)
+    => Direction -> Grapheme -> Command (ViT m) CommandMode CommandMode
 putInState d g s = do
   vstate :: ViState m <- get
   let newstate = vstate { lastInlineSearch = Just g }
